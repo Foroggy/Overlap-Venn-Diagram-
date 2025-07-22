@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dynamic NASA Center Venn Diagram from CSV</title>
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/venn.js@0.2.20/venn.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+    }
+    #venn {
+      width: 1400px;
+      height: 1000px;
+    }
+    .label {
+      font-size: 12px;
+      font-weight: bold;
+      text-anchor: middle;
+      dominant-baseline: bottom;
+      fill: black;
+      pointer-events: none;
+    }
+    input[type="file"] {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>Upload CSV to Generate NASA Center Venn Diagram</h2>
+  <input type="file" id="fileInput" accept=".csv" />
+  <div id="venn"></div>
+
+  <script>
+    document.getElementById('fileInput').addEventListener('change', function(evt) {
+      const file = evt.target.files[0];
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const text = e.target.result;
+        const data = d3.csvParse(text);
+
+        const centerToFunctions = {};
+
+        data.forEach(row => {
+          const name = row['Name']?.trim();
+          const centersRaw = row['Centers']?.trim();
+
+          if (!name) return;
+
+          const centers = centersRaw
+            ? centersRaw.split('\n').map(c => c.trim())
+            : ['GAP'];  // assign to GAP if no center listed
+
+          centers.forEach(center => {
+            if (!centerToFunctions[center]) centerToFunctions[center] = new Set();
+            centerToFunctions[center].add(name);
+          });
+        });
+
+        // Build venn data
+        const vennSets = [];
+        const centerNames = Object.keys(centerToFunctions);
+
+        // Individual centers
+        centerNames.forEach(center => {
+          vennSets.push({
+            sets: [center],
+            size: centerToFunctions[center].size
+          });
+        });
+
+        // Pairwise overlaps
+        for (let i = 0; i < centerNames.length; i++) {
+          for (let j = i + 1; j < centerNames.length; j++) {
+            const a = centerNames[i];
+            const b = centerNames[j];
+            const overlap = [...centerToFunctions[a]].filter(f => centerToFunctions[b].has(f));
+            if (overlap.length > 0) {
+              vennSets.push({ sets: [a, b], size: overlap.length });
+            }
+          }
+        }
+
+        drawVenn(vennSets);
+      };
+
+      reader.readAsText(file);
+    });
+
+    function drawVenn(sets) {
+      d3.select("#venn").selectAll("*").remove();
+
+      const chart = venn.VennDiagram().width(1400).height(1000);
+      const svg = d3.select("#venn").datum(sets).call(chart);
+
+      svg.selectAll("text.label").remove();
+
+      svg.selectAll("g")
+        .filter(d => d.sets.length === 1)
+        .append("text")
+        .attr("class", "label")
+        .attr("x", d => d.center.x)
+        .attr("y", d => d.center.y - d.radius - 10)
+        .text(d => d.sets[0]);
+
+      svg.selectAll(".venn-area")
+        .filter(d => d.sets.includes("GAP"))
+        .style("fill", "#f77")
+        .style("stroke", "#c00")
+        .style("stroke-width", 2);
+    }
+  </script>
+</body>
+</html>
